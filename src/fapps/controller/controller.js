@@ -15,10 +15,9 @@ async function viewAll(req, res){
     if (response.rows.length === 0){
       return res.status(200).json({
         authuser: verify,
-        message: 'Database is empty'
+        message: 'No record found'
       })
     }
-    
     // remove password from return
     response.rows.forEach((data)=>{
       delete data.password
@@ -137,7 +136,7 @@ async function updateEmp(req, res){
         try {
           await app.updateEmployee(newName, newEmail, newUsername, newPassword, id) //update employee
           // update succesful
-          return res.status(201).json({
+          return res.status(200).json({
               status: 'Success',
               authuser: verify,
               message: `Employee's record updated succesfully`,

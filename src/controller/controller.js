@@ -16,58 +16,56 @@ async function userCreator(req, res){
   const id = uuid.v4()
   //generate username, email and password by destructuring request.body
   let { username, email, password} = req.body;
-  let validate = '';
   try {
     //validate request body using authUserSchema
-    validate = await authUserSchema.validateAsync(req.body)
-  } catch (error) {
-    return res.status(400).json({
-      status: 'Failed',
-      message: error.message
-    })
-  }
-  //hashing password
-  const saltRound = 10;
-  //generate salt
-  bcrypt.genSalt(saltRound, (err, salt)=>{
-    if(err){
-      console.log(error.message)
-      return res.status(500).json({
-        message: 'Failed'
-      })
+    await authUserSchema.validateAsync(req.body);
+    const user = await repo.getAllUser();    //getting all existing user in the database
+    //if no existing user, then create
+    if ( user.rows.length === 0){
+      return mymodule.createfn(req, res, id, username, email, password);
+    //if existing user, check...
     }else{
-      //generate hash for input password
-      bcrypt.hash(password, salt, async (err, hash)=>{
-        if (err){
-          console.log(err.message)
-          return res.status(500).json({
-            statu: 'Failed',
+      for(let i = 0; i < user.rows.length; i++){
+        if (user.rows[i].username === username){
+          return res.json({
+            message:'username already exist'
+          })
+        } else if (user.rows[i].email === email){
+          return res.json({
+            message:'email already exist'
           })
         }
-        password = hash    //set password to hash generated for storage purposes
-        const user = await repo.getAllUser();    //getting all existing user in the database
-        //if no existing user, then create
-        if ( user.rows.length === 0){
-          return mymodule.createfn(req, res, id, username, email, password);
-
-        //if existing user, check...
+      }
+      //hashing password
+      const saltRound = 10;
+      //generate salt
+      bcrypt.genSalt(saltRound, (err, salt)=>{
+        if(err){
+          console.log(err.message)
+          return res.status(500).json({
+            message: 'Failed'
+          })
         }else{
-          for(let i = 0; i < user.rows.length; i++){
-            if (user.rows[i].username === username){
-              return res.json({
-                message:'username already exist'
-              })
-            } else if (user.rows[i].email === email){
-              return res.json({
-                message:'email already exist'
+          //generate hash for input password
+          bcrypt.hash(password, salt, async (err, hash)=>{
+            if (err){
+              console.log(err.message)
+              return res.status(500).json({
+                statu: 'Failed',
               })
             }
-          }
-          return mymodule.createfn(req, res, id, username, email, password)  // username and email validation passed, create user.
-          }
+            password = hash    //set password to hash generated for storage purposes
+          })
+        }
       })
+      return mymodule.createfn(req, res, id, username, email, password)  // username and email validation passed, create user.
     }
-  }) 
+  } catch (error) {
+    console.log(error)
+    return res.status(400).json({
+      message: error.message,
+    })
+  } 
 }
 
 
@@ -107,50 +105,55 @@ async function getAll(req, res){
 // login user
 async function loginUser(req, res){
   const { username, password } = req.body //get value from the request body by destructuring
-  const loginUser = await repo.getAllUser(); // get all existing user
-  if(loginUser.rows.length === 0){
-    return res.json({
-      message: 'Database is empty'
-    })
-  }
-  for(let i = 0; i < loginUser.rows.length; i++){
-
-    // check if passed username matches any username in the database
-    if(loginUser.rows[i].username === username){
-      const hashedPassword = loginUser.rows[i].password // getting the hashed password from the table
-
-      //compare the hashed password with the inputed password for match
-      return bcrypt.compare(password, hashedPassword, (err, result) =>{
-        if(result){
-          const user = loginUser.rows[i] //get user
-
-          delete user.password // remove password
-
-          //sign in user, wityh the user as payload to jwt.sign method
-          //passing the secret key
-           jwt.sign({user:user}, process.env.jwt_secretKey, (err, token) =>{
-               res.status(200).json({
-                status: 'Success',
-                user,
-                token  // token generated for authorization
-              })
-          });
-
-        // if input password does not match
-        }else{
-          return res.json({
-            status: 'Password missmatch',
-            message: 'Password is incorrect. try again'
-          })
-        }
-      }) 
+  try {
+    const loginUser = await repo.getAllUser(); // get all existing user
+    if(loginUser.rows.length === 0){
+      return res.json({
+        message: 'No record found'
+      })
     }
-  }
-  // if input username does not match any
-  return res.status(404).json({
-    status: 'Failed',
-    message: 'Username does not exist... try again'
-  })
+    for(let i = 0; i < loginUser.rows.length; i++){
+      // check if passed username matches any username in the database
+      if(loginUser.rows[i].username === username){
+        const hashedPassword = loginUser.rows[i].password // getting the hashed password from the table
+
+        //compare the hashed password with the inputed password for match
+        return bcrypt.compare(password, hashedPassword, (err, result) =>{
+          if(result){
+            const user = loginUser.rows[i] //get user
+
+            delete user.password // remove password
+
+            //sign in user, wityh the user as payload to jwt.sign method
+            //passing the secret key
+              jwt.sign({user:user}, process.env.jwt_secretKey, (err, token) =>{
+                  res.status(200).json({
+                  status: 'Success',
+                  user,
+                  token  // token generated for authorization
+                })
+            });
+          // if input password does not match
+          }else{
+            return res.json({
+              status: 'Password missmatch',
+              message: 'Password is incorrect. try again'
+            })
+          }
+        }) 
+      }
+    }
+    // if input username does not match any
+    return res.status(404).json({
+      status: 'Failed',
+      message: 'Username does not exist... try again'
+    })
+  } catch (error) {
+    console.log(error.message)
+    return res.json({
+      message: 'Internal error'
+    })   
+  } 
 }
 
 async function dellAll(req, res){
